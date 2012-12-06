@@ -137,8 +137,10 @@ integer(4) trcalc
 real(8) totalen,totalvir,totaltri
 
 integer(4) naccept, accept
-real(4),allocatable:: nearm(:,:)
-real(4),allocatable:: kchm(:)
+real(8),allocatable:: nearm(:,:)
+real(8),allocatable:: nearold1(:)
+real(8),allocatable:: nearold2(:)
+real(8),allocatable:: kchm(:)
 integer(4) kchnum,rdfkol,rdfnum
 real(8),allocatable:: rdfm(:),rdfid(:)
 real(8),allocatable:: nearyes(:)
@@ -149,38 +151,47 @@ integer(4) randmove
 
 contains
 function potencfunc(r,i,j)
+    implicit none
 real(8) r,potencfunc
-real(8) u1,u2,ul,rz
+real(8) u1,u2,ul,rz,rz2,rz6
 integer(4) i,j
     if (ptip==1) then
-        rz=p1(i,j)/r    !первая степень
+        rz=p1(atip(i),atip(j))/r    !первая степень
         rz=rz*rz        !вторая степень
         rz=rz*rz*rz     !шестая степень
-        u1=4.0*p2(i,j)*(rz*rz-rz)
-        u2=p5(i,j)*(r-p3(i,j))*(r-p3(i,j))-p4(i,j)
-        ul=0.5*(1.0+dtanh((r-0.75*p1(i,j))/0.015/p1(i,j)))
+        u1=4.0*p2(atip(i),atip(j))*(rz*rz-rz)
+        u2=0.5*p5(atip(i),atip(j))*(r-p3(atip(i),atip(j)))*(r-p3(atip(i),atip(j)))-p4(atip(i),atip(j))
+        ul=0.5*(1.0+dtanh((r-0.75*p1(atip(i),atip(j)))/0.015/p1(atip(i),atip(j))))
         potencfunc=(1.0-ul)*u2+ul*u1
+    endif
+    if (ptip==2) then
+        rz=p1(atip(i),atip(j))/r
+        rz2=rz*rz
+        rz6=rz*rz*rz
+        potencfunc=4.0*p2(atip(i),atip(j))*(rz*rz-rz)
     endif
 end function
 
 !contains
 function ptrifunc(r1,r2,r3,i,j,k)
+    implicit none
 real(8) ptrifunc,r1,r2,r3
 integer(4) i,j,k
 integer(4) pp
     ptrifunc=0.0
     pp=0
-    if (r1<0.75*p1(i,j)) then
+    if (r1<0.75*p1(atip(i),atip(j))) then
         pp=pp+1
     endif
-    if (r2<0.75*p1(j,k)) then
+    if (r2<0.75*p1(atip(j),atip(k))) then
         pp=pp+1
     endif
-    if (r3<0.75*p1(k,i)) then
+    if (r3<0.75*p1(atip(k),atip(i))) then
         pp=pp+1
     endif
     if (pp>1) then
-        ptrifunc=999999999.0
+        ptrifunc=99999999.0
+        !print *, 'ololo'
     endif
     !if (ptip==1) then
     !ptrifunc=0.7872/r1/r1/r1/r2/r2/r2/r3/r3/r3
@@ -189,9 +200,49 @@ integer(4) pp
 end function
 
 function dpotenc(r,i,j)
+    implicit none
+integer(4) i,j
 real(8) r, dpotenc
+real(8) rp,wp,lr,rz,rz2,rz6,sep,U1,U2
+
     if (ptip==1) then
-        dpotenc=0.0
+        !copy start
+        !rz=sqrt(RastSQR)
+        !print *, p1(atip(i),atip(j)),p2(atip(i),atip(j)),p3(atip(i),atip(j)),&
+        !&p4(atip(i),atip(j)),p5(atip(i),atip(j))
+        !pause
+        rp=0.75*p1(atip(i),atip(j)) !r_pot(Ntip(N1),Ntip(N2),i1,i2)
+        !print *,rp
+        wp=0.015*p1(atip(i),atip(j)) !w_pot(Ntip(N1),Ntip(N2),i1,i2)
+        !print *,wp
+        lr=0.5*(1.0+dtanh((r-rp)/wp))
+        !print *,lr
+        rz=p1(atip(i),atip(j))/r
+        rz2=rz*rz
+        rz6=rz2*rz2*rz2
+        U1=4.0*p2(atip(i),atip(j))*(rz6*rz6-rz6)
+        !print *, U1
+        U2=0.5*p5(atip(i),atip(j))*(r-p3(atip(i),atip(j)))*(r-p3(atip(i),atip(j)))&
+        &-p4(atip(i),atip(j))
+        !print *,U2
+        sep=0.5/wp/((dcosh((r-rp)/wp))*(dcosh((r-rp)/wp)))
+        !print *,sep
+        dpotenc=p5(atip(i),atip(j))*(r-p3(atip(i),atip(j)))*(1.0-lr)
+        !print *, dpotenc
+        dpotenc=dpotenc+4.0*p2(atip(i),atip(j))*(6.0*rz6-12.0*rz6*rz6)/r*lr
+        !print *,dpotenc
+        dpotenc=dpotenc-sep*U2
+        !print *, dpotenc
+        dpotenc=dpotenc+sep*U1
+        !print *, dpotenc
+        dpotenc=dpotenc*r
+        !print *, dpotenc
+    endif
+    if (ptip==2) then
+        rz=p1(atip(i),atip(j))/r
+        rz2=rz*rz
+        rz6=rz*rz*rz
+        dpotenc=4.0*p2(atip(i),atip(j))*(6.0*rz-12.0*rz*rz)
     endif
 end function
 end module
@@ -211,7 +262,6 @@ call initmix()
 call pottest()
 call planartest()
 call xyzsatic('somefile.xyz')
-trcalc=0
 call totalcalc()
 do i=1,N
     call checknear(i)
@@ -220,21 +270,33 @@ print *,totalen,totalvir,totaltri
 !pause
 print *,'--- Equilibration start ---'
 open(33,file='movie.xyz')
-open(34,file='equlibration.out')
+open(34,file='numbers.eq')
+open(35,file='energy.eq')
 print *,'--- xyz file is opened ---'
 do emove=1,emoven
     !
     call mcmove()
-    call xyzanim()
-    call equlibout(emove)
+    if (mod(emove,20)==0) then
+        call xyzanim()
+        call equlibout(emove)
+        if (mod(emove,20000)==0) then
+            print *, emove
+        endif
+    endif
+
     !print *,'stepok',emove
 enddo
 do move=1,moven
     !
+    call mcmove()
+    if (mod(move,100)==0) then
+        call resout()
+    endif
 
 enddo
 close(34)
 close(33)
+close(35)
 print *, ' --- Sucsesfully end --- '
 !--------------------------------------------------------
 end program main
@@ -244,6 +306,7 @@ use global
     implicit none
 integer(4) i
 real(8) rVerh,rNiz
+
 
 open(11,file='input.txt')
     read(11,'(a)') temps
@@ -262,6 +325,8 @@ open(11,file='input.txt')
     read(11,'(i10)') moven
     read(11,'(a)') temps
     read(11,'(i10)') randmove
+    read(11,'(a)') temps
+    read(11,'(i10)') trcalc
     allocate(label(nv+1))
     allocate(pp1(nv+1))
     allocate(pp2(nv+1))
@@ -301,11 +366,14 @@ allocate(kchm(100))
 rdfkol=ceiling(kubl/2.0/0.1)
 allocate(rdfm(rdfkol))
 allocate(rdfid(rdfkol))
+allocate(nearold1(N))
+allocate(nearold2(N))
 do i=1,rdfkol
  rNiz=float((i-1))*rcut/float(rdfkol)
  rVerh=float(i)*rcut/float(rdfkol)
  rdfid(i)=4.0/3.0*PI/ro*(rVerh*rVerh*rVerh-rNiz*rNiz*rNiz)
 enddo
+
 do i=1,100
     kchm(i)=0.0
 enddo
@@ -329,6 +397,7 @@ use global
     implicit none
 integer(4) i,j,k,ni
 real(8) dar
+real(8) tempreal1,tempreal2,tempreal3,tempreal4
 
 ni=0
 dar=kubl/float(stor)
@@ -347,33 +416,38 @@ ni=0
 do i=1,nv
     nkol(i)=0
     do j=1,int(N*proc(i))
-    ni=ni+1
-    atip(ni)=i
-    nkol(i)=nkol(i)+1
+        ni=ni+1
+        atip(ni)=i
+        nkol(i)=nkol(i)+1
     enddo
     print *, 'Molecules of type: ',i,'  ', nkol(i)
 enddo
 !print *,int(N*proc(1)) , nkol(1)
 print *,'Initlatice DONE'
 
-xlm=0.0
+!box bounds
+xlm=0.0     !minimal bounds
 ylm=0.0
 zlm=0.0
 
-xlb=kubl
+xlb=kubl    !maimal bounds
 ylb=kubl
 zlb=kubl
 
-xbox=xlb-xlm
+xbox=xlb-xlm    !box lenght
 ybox=ylb-ylm
 zbox=zlb-zlm
 
-kchnum=0
+kchnum=0        !initial numbers of sampling
 rdfnum=0
 
 print *, ' X box : ', xbox
 print *, ' Y box : ', ybox
 print *, ' Z box : ', zbox
+
+do i=1,N    !initial start dinstancess
+    call pcalc(i,tempreal1,tempreal2,tempreal3)
+enddo
 
 end subroutine
 
@@ -445,6 +519,7 @@ real(8) pdx,pdy,pdz
 real(8) rz
 
 pout=0.0
+dpout=0.0
 do i=1,N
     if (i/=Nmol) then
         pdx=abs(x(i)-x(Nmol))
@@ -456,10 +531,10 @@ do i=1,N
             pdy=ybox-pdy
         endif
         pdz=abs(z(i)-z(Nmol))
-        if (pdz>ybox/2.0) then
-            pdz=ybox-pdz
+        if (pdz>zbox/2.0) then
+            pdz=zbox-pdz
         endif
-        rz=sqrt(pdx*pdx+pdy*pdy+pdz*pdz)
+        rz=dsqrt(pdx*pdx+pdy*pdy+pdz*pdz)
         drast(Nmol,i)=rz
         if (rz<rcut) then
             pout=pout+potencfunc(rz,Nmol,i)
@@ -504,10 +579,11 @@ totalen=0.0
 totalvir=0.0
 totaltri=0.0
 
-temptri=0.0
-tempen=0.0
-tempvir=0.0
+
 do i=1,N
+    temptri=0.0
+    tempen=0.0
+    tempvir=0.0
     call pcalc(i,tempen,temptri,tempvir)
     totalen=totalen+tempen
     totalvir=totalvir+tempvir
@@ -534,10 +610,10 @@ do i=1,nv
         p4(i,j)=dsqrt(pp4(i)*pp4(j))
         p5temp=(pp5(i)+pp5(j))/2.0
         p5(i,j)=p4(i,j)/p5temp/p5temp
-        print *,p5(i,j)
+        print *,p5(i,j),p1(i,j)
     enddo
 enddo
-
+!pause
 
 end subroutine
 
@@ -553,7 +629,8 @@ do ir=1,10000
     write(18,'(f30.15,$)') r
     do i=1,nv
         do j=1,nv
-            write(18,'(a,f30.15,$)') ' ',potencfunc(r,i,j)
+            write(18,'(3(a,f30.15),$)') ' ',potencfunc(r,i,j), ' ', dpotenc(r,i,j)&
+            &, ' ', dpotenc(r,i,j)/r
         enddo
     enddo
     write(18,'(a)') ' '
@@ -613,19 +690,24 @@ integer(4) Nmol
 real(8) pnew,tnew,dpnew
 real(8) pold,told,dpold    !
 real(8) xold,yold,zold
+integer(4) i
     Nmol=ceiling(getrand()*float(N))
     !print *, Nmol
     xold=x(Nmol)
     yold=y(Nmol)
     zold=z(Nmol)
+    do i=1,Nmol !old matrix of connection
+        nearold1(i)=nearm(Nmol,i)
+        nearold2(i)=nearm(i,Nmol)
+    enddo
     call pcalc(Nmol,pold,told,dpold)
     !print *,pold,told,dpold
     if (getrand()>0.5) then
         if (randmove==1) then
             if (getrand()<0.5) then
-                call trans(Nmol,0.15*pp1(Nmol))
+                call trans(Nmol,0.15*pp1(atip(Nmol)))
             else
-                call trans(Nmol,pp1(Nmol))
+                call trans(Nmol,pp1(atip(Nmol)))
             endif
         else
             call trans(Nmol,maxdl)
@@ -639,9 +721,9 @@ real(8) xold,yold,zold
         else
             if (randmove==1) then
                 if (getrand()<0.5) then
-                    call trans(Nmol,0.15*pp1(Nmol))
+                    call trans(Nmol,0.15*pp1(atip(Nmol)))
                 else
-                    call trans(Nmol,pp1(Nmol))
+                    call trans(Nmol,pp1(atip(Nmol)))
                 endif
             else
                 call trans(Nmol,maxdl)
@@ -650,28 +732,40 @@ real(8) xold,yold,zold
         !print *,'modtransok'
     endif
     call pcalc(Nmol,pnew,tnew,dpnew)
-    call checkmove(Nmol,pold+told,pnew+tnew,xold,yold,zold)
+    call checkmove(Nmol,pold,told,dpold,pnew,tnew,dpnew,xold,yold,zold)
     call checknear(Nmol)
 
 
 end subroutine
 
-subroutine checkmove(Nmol,pnews,polds,xold,yold,zold)
+subroutine checkmove(Nmol,pdn,ptn,ddn,pds,pts,dds,xold,yold,zold)
 use global
 use generator
     implicit none
-integer(4) Nmol
-real(8) pnews,polds
+integer(4) Nmol,i
+real(8) pdn,ptn,ddn,pds,pts,dds
 real(8) xold,yold,zold
+real(8) delp
 
-if (dexp(-(pnews-polds)/Temp)<getrand()) then
+delp=pdn+ptn-pds-pts
+if (dexp(-(delp)/Temp)<getrand()) then
     !не принимаются
     x(Nmol)=xold
     y(Nmol)=yold
     z(Nmol)=zold
+    do i=1,Nmol
+        nearm(Nmol,i)=nearold1(i)
+        nearm(i,Nmol)=nearold2(i)
+    enddo
     naccept=naccept+1
 else
     accept=accept+1
+    totalen=totalen+pdn-pds
+    totalvir=totalvir+ddn-dds
+    totaltri=totaltri+ptn-pts
+
+    !print *,'proshel', totalen,totalvir,totaltri
+    !pause
     !принимается
 endif
 
@@ -686,18 +780,28 @@ integer(4) Nmol,i
 real(8) chrast,chdx,chdy,chdz
 
 do i=1,N
-    nearm(Nmol,i)=0
-    nearm(i,Nmol)=0
+    nearm(Nmol,i)=0.0
+    nearm(i,Nmol)=0.0
     nearyes(Nmol)=0
     if (i/=Nmol) then
-        chdx=x(Nmol)-x(i)
-        chdy=y(Nmol)-y(i)
-        chdz=z(Nmol)-z(i)
+        chdx=abs(x(Nmol)-x(i))
+        if (chdx>xbox/2.0) then
+            chdx=xbox-chdx
+        endif
+        chdy=abs(y(Nmol)-y(i))
+        if (chdy>ybox/2.0) then
+            chdy=ybox-chdy
+        endif
+        chdz=abs(z(Nmol)-z(i))
+        if (chdz>zbox/2.0) then
+            chdz=zbox-chdz
+        endif
         chrast=dsqrt(chdx*chdx+chdy*chdy+chdz*chdz)
-        if (chrast<p1(Nmol,i)*0.75) then
-            nearm(Nmol,i)=1
-            nearm(i,Nmol)=1
+        if (chrast<p1(atip(Nmol),atip(i))*0.75) then
+            nearm(Nmol,i)=1.0
+            nearm(i,Nmol)=1.0
             nearyes(Nmol)=1
+            !print *,'nashel rastoyanie', chrast, p1(Nmol,i)*0.75, i ,Nmol
         endif
     endif
 enddo
@@ -715,7 +819,7 @@ real(8) sinox,cosox,sinoy,cosoy,sinoz,cosoz
 real(8) xv,yv,zv,rast_vr
 
 do i=1,N
-    if (nearm(Nmol,i)==1) then
+    if (nearm(Nmol,i)>0.5) then
         nearmol=i
     endif
 enddo
@@ -770,7 +874,7 @@ do i=1,N
     histkch=0
     do j=1,N
         if (i/=j) then
-            if (nearm(i,j)==1) then
+            if (nearm(i,j)>0.5) then
                 sumkch=sumkch+1.0
                 histkch=histkch+1
             endif
@@ -832,7 +936,7 @@ close(13)
 open(13,file='densdist.out')
     !распределение по плотности
 close(13)
-open(13,file='')
+open(13,file='kch.out')
     !распределение по координационному числу
     obshkch=0.0
     obshkch2=0.0
@@ -893,16 +997,20 @@ kch4=0
 kch5=0
 kchsum1=0.0
 kchsum2=0.0
+
 do i=1,N
     histkch=0
     do j=1,N
         if (i/=j) then
-            if (nearm(i,j)==1) then
+            if (nearm(i,j)>0.5) then
                 kchob=kchob+1
                 histkch=histkch+1
+                !print *, nearm(i,j),histkch
             endif
         endif
     enddo
+    !pause
+    !print *,i,histkch
     if (histkch==0) then
         kch0=kch0+1
     endif
@@ -925,11 +1033,14 @@ enddo
 kchsum1=float(kch0+kch1+kch2+kch3+kch4+kch5)
 kchsum2=float(kch0)+float(kch1)/2.0+float(kch2)/3.0+float(kch3)/4.0+float(kch4)/5.0&
         &+float(kch5)/6.0
+!print *, kchob, kch0,kch1,kch2
+!print *,nearm
+!pause
 
 write(34,'(i8,13f20.15)') nmove,float(kch0)/kchsum1,float(kch1)/kchsum1,float(kch2)/kchsum1,&
     &float(kch3)/kchsum1,float(kch4)/kchsum1,float(kch5)/kchsum1,float(kch0)/kchsum2,&
     &float(kch1)/kchsum2/2.0&
     &,float(kch2)/3.0/kchsum2,&
     float(kch3)/4.0/kchsum2,float(kch4)/5.0/kchsum2,float(kch5)/6.0/kchsum2,float(kchob)/float(N*N)
-
+write(35,'(i8,3f40.15)') nmove,totalen,totaltri,totalvir
 end subroutine
