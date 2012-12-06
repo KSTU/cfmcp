@@ -130,6 +130,7 @@ integer(4) moven,move,emoven,emove
 
 real(8) xlm,xlb,ylm,ylb,zlm,zlb
 real(8) xbox,ybox,zbox
+real(8) xboxh,yboxh,zboxh
 
 real(8),allocatable:: drast(:,:)
 real(8),allocatable:: temrast(:)
@@ -141,8 +142,10 @@ real(8),allocatable:: nearm(:,:)
 real(8),allocatable:: nearold1(:)
 real(8),allocatable:: nearold2(:)
 real(8),allocatable:: kchm(:)
-integer(4) kchnum,rdfkol,rdfnum
-real(8),allocatable:: rdfm(:),rdfid(:)
+integer(4) kchnum,rdfkol1,rdfkol2,rdfkol3,rdfnum
+real(8),allocatable:: rdfm1(:),rdfid1(:)
+real(8),allocatable:: rdfm2(:),rdfid2(:)
+real(8),allocatable:: rdfm3(:),rdfid3(:)
 real(8),allocatable:: nearyes(:)
 real(8) maxdl
 real(8) PI
@@ -286,10 +289,15 @@ do emove=1,emoven
 
     !print *,'stepok',emove
 enddo
+print *, 'Productation started'
 do move=1,moven
     !
     call mcmove()
-    if (mod(move,100)==0) then
+    if (mod(move,1000)==0) then
+        if (mod(move,50000)==0) then
+            print *,move
+        endif
+        call calcrdf()
         call resout()
     endif
 
@@ -363,22 +371,53 @@ allocate(z(N))
 allocate(nearm(N,N))
 allocate(nearyes(N))
 allocate(kchm(100))
-rdfkol=ceiling(kubl/2.0/0.1)
-allocate(rdfm(rdfkol))
-allocate(rdfid(rdfkol))
+rdfkol1=ceiling(kubl/2.0/0.1)
+rdfkol2=ceiling(kubl/2.0/0.05)
+rdfkol3=ceiling(kubl/2.0/0.02)
+allocate(rdfm1(rdfkol1))
+allocate(rdfm2(rdfkol2))
+allocate(rdfm3(rdfkol3))
+allocate(rdfid1(rdfkol1))
+allocate(rdfid2(rdfkol2))
+allocate(rdfid3(rdfkol3))
 allocate(nearold1(N))
 allocate(nearold2(N))
-do i=1,rdfkol
- rNiz=float((i-1))*rcut/float(rdfkol)
- rVerh=float(i)*rcut/float(rdfkol)
- rdfid(i)=4.0/3.0*PI/ro*(rVerh*rVerh*rVerh-rNiz*rNiz*rNiz)
+do i=1,rdfkol1  !ideal distribution
+ rNiz=float((i-1))*rcut/float(rdfkol1)
+ rVerh=float(i)*rcut/float(rdfkol1)
+ rdfid1(i)=4.0/3.0*PI/ro*(rVerh*rVerh*rVerh-rNiz*rNiz*rNiz)
 enddo
 
-do i=1,100
+do i=1,rdfkol2  !ideal distribution 2
+ rNiz=float((i-1))*rcut/float(rdfkol2)
+ rVerh=float(i)*rcut/float(rdfkol2)
+ rdfid2(i)=4.0/3.0*PI/ro*(rVerh*rVerh*rVerh-rNiz*rNiz*rNiz)
+enddo
+
+do i=1,rdfkol3  !ideal distribution 3
+ rNiz=float((i-1))*rcut/float(rdfkol3)
+ rVerh=float(i)*rcut/float(rdfkol3)
+ rdfid3(i)=4.0/3.0*PI/ro*(rVerh*rVerh*rVerh-rNiz*rNiz*rNiz)
+enddo
+
+!open(23,file='rdfid.out')  !out of ideal part
+!do i=1,rdfkol1
+!    write(23,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol1), ' ', rdfid1(i)
+!enddo
+!close(23)
+!stop
+
+do i=1,100          !zero initial
     kchm(i)=0.0
 enddo
-do i=1,rdfkol
-    rdfm(i)=0.0
+do i=1,rdfkol1
+    rdfm1(i)=0.0
+enddo
+do i=1,rdfkol2
+    rdfm2(i)=0.0
+enddo
+do i=1,rdfkol3
+    rdfm3(i)=0.0
 enddo
 maxdl=1.0
 print *, '--- Initail file loaded ---'
@@ -448,7 +487,7 @@ print *, ' Z box : ', zbox
 do i=1,N    !initial start dinstancess
     call pcalc(i,tempreal1,tempreal2,tempreal3)
 enddo
-
+print *,'cut radius ',rcut
 end subroutine
 
 subroutine xyzsatic(fname)
@@ -523,19 +562,20 @@ dpout=0.0
 do i=1,N
     if (i/=Nmol) then
         pdx=abs(x(i)-x(Nmol))
-        if (pdx>xbox/2.0) then
+        if (pdx>xboxh) then
             pdx=xbox-pdx
         endif
         pdy=abs(y(i)-y(Nmol))
-        if (pdy>ybox/2.0) then
+        if (pdy>yboxh) then
             pdy=ybox-pdy
         endif
         pdz=abs(z(i)-z(Nmol))
-        if (pdz>zbox/2.0) then
+        if (pdz>zboxh) then
             pdz=zbox-pdz
         endif
         rz=dsqrt(pdx*pdx+pdy*pdy+pdz*pdz)
         drast(Nmol,i)=rz
+        drast(i,Nmol)=rz
         if (rz<rcut) then
             pout=pout+potencfunc(rz,Nmol,i)
             dpout=dpout+dpotenc(rz,Nmol,i)  !считать в другом месте?
@@ -602,6 +642,7 @@ use global
 integer(4) i,j
 real(8) p5temp
 
+print *,'init mix'
 do i=1,nv
     do j=1,nv
         p1(i,j)=(pp1(i)+pp1(j))/2.0
@@ -610,10 +651,16 @@ do i=1,nv
         p4(i,j)=dsqrt(pp4(i)*pp4(j))
         p5temp=(pp5(i)+pp5(j))/2.0
         p5(i,j)=p4(i,j)/p5temp/p5temp
-        print *,p5(i,j),p1(i,j)
+        print *,'sigma',p1(i,j)
+        print *,'epsi',p2(i,j)
+        print *,'L',p3(i,j)
+        print *,'De',p4(i,j)
+        print *,'k',p5(i,j)
+        print *,'DL', p5temp
     enddo
 enddo
 !pause
+print *, 'init mix DONE'
 
 end subroutine
 
@@ -890,29 +937,42 @@ use global
     implicit none
 integer(4) i,j
 real(8) pdx,pdy,pdz
-integer(4) hist
+integer(4) hist1,hist2,hist3
 real(8) rz
 
+do i=1,rdfkol1
+    rdfm1(i) =0.0
+enddo
+do i=1,rdfkol2
+    rdfm2(i) =0.0
+enddo
+do i=1,rdfkol3
+    rdfm3(i) =0.0
+enddo
 rdfnum=rdfnum+1
 do i=1,N
-    do j=1,N
+    do j=i,N
         if (i/=j) then
         pdx=abs(x(i)-x(j))
-        if (pdx>xbox/2.0) then
+        if (pdx>xboxh) then
             pdx=xbox-pdx
         endif
         pdy=abs(y(i)-y(j))
-        if (pdy>ybox/2.0) then
+        if (pdy>yboxh) then
             pdy=ybox-pdy
         endif
         pdz=abs(z(i)-z(j))
-        if (pdz>zbox) then
+        if (pdz>zboxh) then
             pdz=zbox-pdz
         endif
         rz=sqrt(pdx*pdx+pdy*pdy+pdz*pdz)
         if (rz<rcut) then
-            hist=ceiling(rz/rcut*float(rdfkol))
-            rdfm(hist)=rdfm(hist)+1.0
+            hist1=ceiling(rz/rcut*float(rdfkol1))
+            hist2=ceiling(rz/rcut*float(rdfkol2))
+            hist3=ceiling(rz/rcut*float(rdfkol3))
+            rdfm1(hist1)=rdfm1(hist1)+1.0
+            rdfm2(hist2)=rdfm2(hist2)+1.0
+            rdfm3(hist3)=rdfm3(hist3)+1.0
         endif
         endif
     enddo
@@ -927,9 +987,20 @@ use global
 integer(4) i
 real(8) obshkch,obshkch2
 !kch output
-open(13,file='rdf.out')
-do i=1,rdfkol
-    write(13,'(f20.10,a,f20.10)') (float(i)-0.5)/rcut/float(rdfkol), ' ', rdfm(i)/rdfnum*rdfid(i)
+open(13,file='rdf1.out')
+do i=1,rdfkol1
+    write(13,'(f20.10,a,f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol1), ' ',&
+    & rdfm1(i)/float(rdfnum)/rdfid1(i), ' ',rdfm1(i)
+enddo
+close(13)
+open(13,file='rdf2.out')
+do i=1,rdfkol2
+    write(13,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol2), ' ', rdfm2(i)/float(rdfnum)/rdfid2(i)
+enddo
+close(13)
+open(13,file='rdf3.out')
+do i=1,rdfkol3
+    write(13,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol3), ' ', rdfm3(i)/float(rdfnum)/rdfid3(i)
 enddo
 close(13)
 !
