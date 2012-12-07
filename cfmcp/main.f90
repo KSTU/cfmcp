@@ -169,15 +169,19 @@ integer(4) i,j
         potencfunc=(1.0-ul)*u2+ul*u1
     endif
     if (ptip==2) then
-        if (r>0.4*p1(atip(i),atip(j))) then
+        if (r>0.1*p1(atip(i),atip(j))) then
             rz=p1(atip(i),atip(j))/r
             rz2=rz*rz
             rz6=rz2*rz2*rz2
             potencfunc=4.0*p2(atip(i),atip(j))*(rz6*rz6-rz6)
         else
-            potencfunc=999999999.999
+            potencfunc=99999999999.999
         endif
     endif
+    if (ptip==3) then
+        potencfunc=1.0
+    endif
+
 end function
 
 !contains
@@ -247,7 +251,7 @@ real(8) rp,wp,lr,rz,rz2,rz6,sep,U1,U2
         !print *, dpotenc
     endif
     if (ptip==2) then
-        if (r>0.4*p1(atip(i),atip(j))) then
+        if (r>0.1*p1(atip(i),atip(j))) then
             rz=p1(atip(i),atip(j))/r
             rz2=rz*rz
             rz6=rz2*rz2*rz2
@@ -255,6 +259,9 @@ real(8) rp,wp,lr,rz,rz2,rz6,sep,U1,U2
         else
             dpotenc=0.0
         endif
+    endif
+    if (ptip==3) then
+        dpotenc=0.0
     endif
 end function
 end module
@@ -264,7 +271,7 @@ program main
 use generator
 use global
     implicit none
-    integer(4) i
+    integer(4) i,j
 !начало программы----------------------------------------
 call randomn
 print *,'--- Generator Start ---'
@@ -284,6 +291,8 @@ print *,'--- Equilibration start ---'
 open(33,file='movie.xyz')
 open(34,file='numbers.eq')
 open(35,file='energy.eq')
+!print *, getrand(), getrand(), getrand(), getrand()
+
 print *,'--- xyz file is opened ---'
 do emove=1,emoven
     !
@@ -412,11 +421,11 @@ do i=1,rdfkol3  !ideal distribution 3
  rdfid3(i)=4.0/3.0*PI/ro*(rVerh*rVerh*rVerh-rNiz*rNiz*rNiz)
 enddo
 
-!open(23,file='rdfid.out')  !out of ideal part
-!do i=1,rdfkol1
-!    write(23,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol1), ' ', rdfid1(i)
-!enddo
-!close(23)
+open(23,file='rdfid.out')  !out of ideal part
+do i=1,rdfkol1
+    write(23,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol1), ' ', rdfid1(i)
+enddo
+close(23)
 !stop
 
 do i=1,100          !zero initial
@@ -575,25 +584,32 @@ pout=0.0
 dpout=0.0
 do i=1,N
     if (i/=Nmol) then
+
         pdx=abs(x(i)-x(Nmol))
         if (pdx>xboxh) then
             pdx=xbox-pdx
         endif
+
         pdy=abs(y(i)-y(Nmol))
         if (pdy>yboxh) then
             pdy=ybox-pdy
         endif
+
         pdz=abs(z(i)-z(Nmol))
         if (pdz>zboxh) then
             pdz=zbox-pdz
         endif
+    !print *,z(Nmol),z(i),z(i)-z(Nmol),pdz
         rz=dsqrt(pdx*pdx+pdy*pdy+pdz*pdz)
+    !print *,rz,Nmol,i
         drast(Nmol,i)=rz
         drast(i,Nmol)=rz
-        if (rz<rcut) then
+        if (rz<rcut*10.0) then
             pout=pout+potencfunc(rz,Nmol,i)
             dpout=dpout+dpotenc(rz,Nmol,i)  !считать в другом месте?
         endif
+    !print *, potencfunc(rz,Nmol,i),dpotenc(rz,Nmol,i)
+    !pause
     endif
 enddo
 !if (pout<-999.0) then
@@ -1026,7 +1042,7 @@ do i=1,rdfkol1
     write(13,'(f20.10,a,$)') (float(i)-0.5)*rcut/float(rdfkol1), ' '
     do j=1,nv*nv
         write(13,'(f20.10,a,$)') rdfm1(j,i)/float(rdfnum)/rdfid1(i), ' '
-        write(13,'(f20.10,a,$)') rdfm1(j,i), ' '
+        write(13,'(f20.10,a,$)') rdfm1(j,i)/float(rdfnum), ' '
     enddo
     write(13,'(a)') ' '
 enddo
