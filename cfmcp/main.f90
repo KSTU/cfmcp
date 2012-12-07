@@ -103,7 +103,7 @@ real(8) kubl
 real(8) rcut
 character(20) temps
 
-real(8),allocatable:: proc(:)
+integer(4),allocatable:: proc(:)
 integer(4),allocatable:: nkol(:)
 character(10),allocatable:: label(:)
 real(8),allocatable:: pp1(:)
@@ -143,9 +143,10 @@ real(8),allocatable:: nearold1(:)
 real(8),allocatable:: nearold2(:)
 real(8),allocatable:: kchm(:)
 integer(4) kchnum,rdfkol1,rdfkol2,rdfkol3,rdfnum
-real(8),allocatable:: rdfm1(:),rdfid1(:)
-real(8),allocatable:: rdfm2(:),rdfid2(:)
-real(8),allocatable:: rdfm3(:),rdfid3(:)
+real(8),allocatable:: rdfm1(:,:),rdfid1(:)
+real(8),allocatable:: rdfm2(:,:),rdfid2(:)
+real(8),allocatable:: rdfm3(:,:),rdfid3(:)
+real(8),allocatable:: sumrdfm1(:,:),sumrdfm2(:,:),sumrdfm3(:,:)
 real(8),allocatable:: nearyes(:)
 real(8) maxdl
 real(8) PI
@@ -168,10 +169,14 @@ integer(4) i,j
         potencfunc=(1.0-ul)*u2+ul*u1
     endif
     if (ptip==2) then
-        rz=p1(atip(i),atip(j))/r
-        rz2=rz*rz
-        rz6=rz*rz*rz
-        potencfunc=4.0*p2(atip(i),atip(j))*(rz*rz-rz)
+        if (r>0.4*p1(atip(i),atip(j))) then
+            rz=p1(atip(i),atip(j))/r
+            rz2=rz*rz
+            rz6=rz2*rz2*rz2
+            potencfunc=4.0*p2(atip(i),atip(j))*(rz6*rz6-rz6)
+        else
+            potencfunc=999999999.999
+        endif
     endif
 end function
 
@@ -242,10 +247,14 @@ real(8) rp,wp,lr,rz,rz2,rz6,sep,U1,U2
         !print *, dpotenc
     endif
     if (ptip==2) then
-        rz=p1(atip(i),atip(j))/r
-        rz2=rz*rz
-        rz6=rz*rz*rz
-        dpotenc=4.0*p2(atip(i),atip(j))*(6.0*rz-12.0*rz*rz)
+        if (r>0.4*p1(atip(i),atip(j))) then
+            rz=p1(atip(i),atip(j))/r
+            rz2=rz*rz
+            rz6=rz2*rz2*rz2
+            dpotenc=4.0*p2(atip(i),atip(j))*(6.0*rz6-12.0*rz6*rz6)
+        else
+            dpotenc=0.0
+        endif
     endif
 end function
 end module
@@ -312,7 +321,7 @@ end program main
 subroutine initialfiles()
 use global
     implicit none
-integer(4) i
+integer(4) i,j
 real(8) rVerh,rNiz
 
 
@@ -350,7 +359,7 @@ open(11,file='input.txt')
     allocate(nkol(nv))
     do i=1,nv
         read(11,'(a)') label(i)
-        read(11,'(f10.5)') proc(i)
+        read(11,'(i5)') proc(i)
         read(11,'(f10.5)') pp1(i)
         read(11,'(f10.5)') pp2(i)
         read(11,'(f10.5)') pp3(i)
@@ -371,15 +380,18 @@ allocate(z(N))
 allocate(nearm(N,N))
 allocate(nearyes(N))
 allocate(kchm(100))
-rdfkol1=ceiling(kubl/2.0/0.1)
-rdfkol2=ceiling(kubl/2.0/0.05)
-rdfkol3=ceiling(kubl/2.0/0.02)
-allocate(rdfm1(rdfkol1))
-allocate(rdfm2(rdfkol2))
-allocate(rdfm3(rdfkol3))
+rdfkol1=ceiling(kubl/2.0/0.05)
+rdfkol2=ceiling(kubl/2.0/0.02)
+rdfkol3=ceiling(kubl/2.0/0.005)
+allocate(rdfm1(nv*nv,rdfkol1))
+allocate(rdfm2(nv*nv,rdfkol2))
+allocate(rdfm3(nv*nv,rdfkol3))
 allocate(rdfid1(rdfkol1))
 allocate(rdfid2(rdfkol2))
 allocate(rdfid3(rdfkol3))
+allocate(sumrdfm1(nv*nv,rdfkol1))
+allocate(sumrdfm2(nv*nv,rdfkol2))
+allocate(sumrdfm3(nv*nv,rdfkol3))
 allocate(nearold1(N))
 allocate(nearold2(N))
 do i=1,rdfkol1  !ideal distribution
@@ -410,14 +422,16 @@ enddo
 do i=1,100          !zero initial
     kchm(i)=0.0
 enddo
-do i=1,rdfkol1
-    rdfm1(i)=0.0
-enddo
-do i=1,rdfkol2
-    rdfm2(i)=0.0
-enddo
-do i=1,rdfkol3
-    rdfm3(i)=0.0
+do j=1,nv*nv
+    do i=1,rdfkol1
+        rdfm1(j,i)=0.0
+    enddo
+    do i=1,rdfkol2
+        rdfm2(j,i)=0.0
+    enddo
+    do i=1,rdfkol3
+        rdfm3(j,i)=0.0
+    enddo
 enddo
 maxdl=1.0
 print *, '--- Initail file loaded ---'
@@ -444,9 +458,9 @@ do i=1,stor
     do j=1,stor
         do k=1,stor
             ni=ni+1
-            x(ni)=float(i)*dar
-            y(ni)=float(j)*dar
-            z(ni)=float(k)*dar
+            x(ni)=float(i)*dar-0.5*dar
+            y(ni)=float(j)*dar-0.5*dar
+            z(ni)=float(k)*dar-0.5*dar
         enddo
     enddo
 enddo
@@ -454,7 +468,7 @@ enddo
 ni=0
 do i=1,nv
     nkol(i)=0
-    do j=1,int(N*proc(i))
+    do j=1,proc(i)
         ni=ni+1
         atip(ni)=i
         nkol(i)=nkol(i)+1
@@ -480,9 +494,9 @@ zbox=zlb-zlm
 kchnum=0        !initial numbers of sampling
 rdfnum=0
 
-print *, ' X box : ', xbox
-print *, ' Y box : ', ybox
-print *, ' Z box : ', zbox
+print *, ' X box : ',xlm, xbox,xlb
+print *, ' Y box : ',ylm, ybox,ylb
+print *, ' Z box : ',zlm, zbox,zlb
 
 do i=1,N    !initial start dinstancess
     call pcalc(i,tempreal1,tempreal2,tempreal3)
@@ -582,6 +596,9 @@ do i=1,N
         endif
     endif
 enddo
+!if (pout<-999.0) then
+!    print *,emove,pout
+!endif
 triple=0.0
 if (trcalc==1) then
     do i=1,N
@@ -810,7 +827,6 @@ else
     totalen=totalen+pdn-pds
     totalvir=totalvir+ddn-dds
     totaltri=totaltri+ptn-pts
-
     !print *,'proshel', totalen,totalvir,totaltri
     !pause
     !принимается
@@ -832,15 +848,15 @@ do i=1,N
     nearyes(Nmol)=0
     if (i/=Nmol) then
         chdx=abs(x(Nmol)-x(i))
-        if (chdx>xbox/2.0) then
+        if (chdx>xboxh) then
             chdx=xbox-chdx
         endif
         chdy=abs(y(Nmol)-y(i))
-        if (chdy>ybox/2.0) then
+        if (chdy>yboxh) then
             chdy=ybox-chdy
         endif
         chdz=abs(z(Nmol)-z(i))
-        if (chdz>zbox/2.0) then
+        if (chdz>zboxh) then
             chdz=zbox-chdz
         endif
         chrast=dsqrt(chdx*chdx+chdy*chdy+chdz*chdz)
@@ -879,7 +895,7 @@ y(Nmol)=y(Nmol)-y(nearmol)
 z(Nmol)=z(Nmol)-z(nearmol)
 !print *,x(Nmol)
 !print *,y(Nmol)
-print *,dsqrt(x(Nmol)*x(Nmol)+y(Nmol)*y(Nmol)+z(Nmol)*z(Nmol))
+!print *,dsqrt(x(Nmol)*x(Nmol)+y(Nmol)*y(Nmol)+z(Nmol)*z(Nmol))
 
 !находим растояние вокруг которого надо вращать
 rast_vr=1.0+(getrand()-0.5)*0.005
@@ -940,15 +956,15 @@ real(8) pdx,pdy,pdz
 integer(4) hist1,hist2,hist3
 real(8) rz
 
-do i=1,rdfkol1
-    rdfm1(i) =0.0
-enddo
-do i=1,rdfkol2
-    rdfm2(i) =0.0
-enddo
-do i=1,rdfkol3
-    rdfm3(i) =0.0
-enddo
+!do i=1,rdfkol1
+!    rdfm1(i) =0.0
+!enddo
+!do i=1,rdfkol2
+!    rdfm2(i) =0.0
+!enddo
+!do i=1,rdfkol3
+!    rdfm3(i) =0.0
+!enddo
 rdfnum=rdfnum+1
 do i=1,N
     do j=i,N
@@ -966,41 +982,72 @@ do i=1,N
             pdz=zbox-pdz
         endif
         rz=sqrt(pdx*pdx+pdy*pdy+pdz*pdz)
+        !if (rz<(0.5*p1(atip(i),atip(j)))) then
+        !    !print *, (rz<0.5*p1(i,j))
+        !    !print *,x(i),y(i),z(i)
+        !    !print *,x(j),y(j),z(j)
+        !    print *,rz,i,j,(0.5*p1(atip(i),atip(j)))
+        !    print *,(rz<rcut)
+        !endif
         if (rz<rcut) then
+            !print *, rcut, rz, rz/rcut*float(rdfkol1)
             hist1=ceiling(rz/rcut*float(rdfkol1))
             hist2=ceiling(rz/rcut*float(rdfkol2))
             hist3=ceiling(rz/rcut*float(rdfkol3))
-            rdfm1(hist1)=rdfm1(hist1)+1.0
-            rdfm2(hist2)=rdfm2(hist2)+1.0
-            rdfm3(hist3)=rdfm3(hist3)+1.0
+            !print *,hist1,rdfkol1
+            !pause
+            rdfm1((atip(i)-1)*nv+atip(j),hist1)=rdfm1((atip(i)-1)*nv+atip(j),hist1)+1.0
+            rdfm2((atip(i)-1)*nv+atip(j),hist2)=rdfm2((atip(i)-1)*nv+atip(j),hist2)+1.0
+            rdfm3((atip(i)-1)*nv+atip(j),hist3)=rdfm3((atip(i)-1)*nv+atip(j),hist3)+1.0
         endif
         endif
     enddo
 enddo
-
+!do i=1,rdfkol1
+!    sumrdfm1(i)=sumrdfm1(i)+rdfm1(i)
+!enddo
+!do i=1,rdfkol2
+!    sumrdfm2(i)=sumrdfm2(i)+rdfm2(i)
+!enddo
+!do i=1,rdfkol3
+!    sumrdfm3(i)=sumrdfm3(i)+rdfm3(i)
+!enddo
 end subroutine
 
 
 subroutine resout()
 use global
     implicit none
-integer(4) i
+integer(4) i,j
 real(8) obshkch,obshkch2
 !kch output
 open(13,file='rdf1.out')
 do i=1,rdfkol1
-    write(13,'(f20.10,a,f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol1), ' ',&
-    & rdfm1(i)/float(rdfnum)/rdfid1(i), ' ',rdfm1(i)
+    write(13,'(f20.10,a,$)') (float(i)-0.5)*rcut/float(rdfkol1), ' '
+    do j=1,nv*nv
+        write(13,'(f20.10,a,$)') rdfm1(j,i)/float(rdfnum)/rdfid1(i), ' '
+        write(13,'(f20.10,a,$)') rdfm1(j,i), ' '
+    enddo
+    write(13,'(a)') ' '
 enddo
 close(13)
 open(13,file='rdf2.out')
 do i=1,rdfkol2
-    write(13,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol2), ' ', rdfm2(i)/float(rdfnum)/rdfid2(i)
+    write(13,'(f20.10,a,$)') (float(i)-0.5)*rcut/float(rdfkol2), ' '
+    do j=1,nv*nv
+        write(13,'(f20.10,a,$)') rdfm2(j,i)/float(rdfnum)/rdfid2(i), ' '
+        write(13,'(f20.10,a,$)') rdfm2(j,i), ' '
+    enddo
+    write(13,'(a)') ' '
 enddo
 close(13)
 open(13,file='rdf3.out')
 do i=1,rdfkol3
-    write(13,'(f20.10,a,f20.10)') (float(i)-0.5)*rcut/float(rdfkol3), ' ', rdfm3(i)/float(rdfnum)/rdfid3(i)
+    write(13,'(f20.10,a,$)') (float(i)-0.5)*rcut/float(rdfkol3), ' '
+    do j=1,nv*nv
+        write(13,'(f20.10,a,$)') rdfm3(j,i)/float(rdfnum)/rdfid3(i), ' '
+    enddo
+    write(13,'(a)') ' '
 enddo
 close(13)
 !
