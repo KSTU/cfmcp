@@ -1,3 +1,4 @@
+!дома ночь 7-8 12
 module generator    !модуль генератора
  integer(4) n1, n2, n3 !случаные числа
  integer(4) m1,a1,b1,a2,b2,m3,m2 !параметры генератора
@@ -59,6 +60,7 @@ n3=ceiling((n31*max3)-1)
  call randstart()
  randmass(i)=outrand
  enddo
+print *,'--- Generator Start ---'
 end subroutine
 !*******************************************************
 !Рандомная функция начало
@@ -120,6 +122,7 @@ real(8),allocatable:: p5(:,:)
 
 real(8) temp
 real(8) ro
+real(8) pdo,ppos
 
 integer(8),allocatable:: atip(:)
 real(8),allocatable:: x(:)
@@ -146,11 +149,13 @@ integer(4) kchnum,rdfkol1,rdfkol2,rdfkol3,rdfnum
 real(8),allocatable:: rdfm1(:,:),rdfid1(:)
 real(8),allocatable:: rdfm2(:,:),rdfid2(:)
 real(8),allocatable:: rdfm3(:,:),rdfid3(:)
+real(8) delrdf1,delrdf2,delrdf3
 real(8),allocatable:: sumrdfm1(:,:),sumrdfm2(:,:),sumrdfm3(:,:)
 real(8),allocatable:: nearyes(:)
 real(8) maxdl
 real(8) PI
 integer(4) randmove
+real(8) xold,yold,zold
 !================================================================
 
 contains
@@ -175,13 +180,12 @@ integer(4) i,j
             rz6=rz2*rz2*rz2
             potencfunc=4.0*p2(atip(i),atip(j))*(rz6*rz6-rz6)
         else
-            potencfunc=99999999999.999
+            potencfunc=99999.999
         endif
     endif
     if (ptip==3) then
         potencfunc=1.0
     endif
-
 end function
 
 !contains
@@ -257,7 +261,7 @@ real(8) rp,wp,lr,rz,rz2,rz6,sep,U1,U2
             rz6=rz2*rz2*rz2
             dpotenc=4.0*p2(atip(i),atip(j))*(6.0*rz6-12.0*rz6*rz6)
         else
-            dpotenc=0.0
+            dpotenc=99999999999.0
         endif
     endif
     if (ptip==3) then
@@ -274,17 +278,16 @@ use global
     integer(4) i,j
 !начало программы----------------------------------------
 call randomn
-print *,'--- Generator Start ---'
 call initialfiles()
 call initlatice()
 call initmix()
 call pottest()
-call planartest()
+!call planartest()
 call xyzsatic('somefile.xyz')
 call totalcalc()
-do i=1,N
-    call checknear(i)
-enddo
+!do i=1,N
+!    call checknear(i)
+!enddo
 print *,totalen,totalvir,totaltri
 !pause
 print *,'--- Equilibration start ---'
@@ -381,17 +384,20 @@ PI=3.14159265358979323846
 N=stor*stor*stor
 kubl=(float(N)/ro)**(1.0/3.0)
 rcut=kubl/2.0
-allocate(drast(N,N))
 allocate(atip(N))
 allocate(x(N))
 allocate(y(N))
 allocate(z(N))
 allocate(nearm(N,N))
+allocate(drast(N,N))
 allocate(nearyes(N))
 allocate(kchm(100))
 rdfkol1=ceiling(kubl/2.0/0.05)
 rdfkol2=ceiling(kubl/2.0/0.02)
 rdfkol3=ceiling(kubl/2.0/0.005)
+delrdf1=rcut/float(rdfkol1)
+delrdf2=rcut/float(rdfkol2)
+delrdf3=rcut/float(rdfkol3)
 allocate(rdfm1(nv*nv,rdfkol1))
 allocate(rdfm2(nv*nv,rdfkol2))
 allocate(rdfm3(nv*nv,rdfkol3))
@@ -403,6 +409,7 @@ allocate(sumrdfm2(nv*nv,rdfkol2))
 allocate(sumrdfm3(nv*nv,rdfkol3))
 allocate(nearold1(N))
 allocate(nearold2(N))
+
 do i=1,rdfkol1  !ideal distribution
  rNiz=float((i-1))*rcut/float(rdfkol1)
  rVerh=float(i)*rcut/float(rdfkol1)
@@ -484,6 +491,10 @@ do i=1,nv
     enddo
     print *, 'Molecules of type: ',i,'  ', nkol(i)
 enddo
+if (sum(nkol)/=N) then
+    print *,'Numbers of nkol no equal N'
+    stop
+endif
 !print *,int(N*proc(1)) , nkol(1)
 print *,'Initlatice DONE'
 
@@ -534,11 +545,15 @@ use global
 use generator
     implicit none
 integer(4) Nmol
-real(8) maxtrans
+real(8) maxtrans,dx,dy,dz
 
-x(Nmol)=x(Nmol)+(getrand()-0.5)*2.0*maxtrans
-y(Nmol)=y(Nmol)+(getrand()-0.5)*2.0*maxtrans
-z(Nmol)=z(Nmol)+(getrand()-0.5)*2.0*maxtrans
+dx=(getrand()-0.5)*2.0*maxtrans
+dy=(getrand()-0.5)*2.0*maxtrans
+dz=(getrand()-0.5)*2.0*maxtrans
+
+x(Nmol)=x(Nmol)+dx
+y(Nmol)=y(Nmol)+dy
+z(Nmol)=z(Nmol)+dz
 
 call checkbox(Nmol)
 
@@ -569,7 +584,6 @@ if (z(Nmol)<zlm) then
     z(Nmol)=z(Nmol)+zbox
 endif
 
-
 end subroutine
 
 subroutine pcalc(Nmol,pout,triple,dpout)
@@ -579,42 +593,26 @@ integer(4) i,j,Nmol
 real(8) pout,triple,dpout
 real(8) pdx,pdy,pdz
 real(8) rz
+integer(4) im
+real(8) dpot,ddpot
 
 pout=0.0
+triple=0.0
 dpout=0.0
-do i=1,N
-    if (i/=Nmol) then
-
-        pdx=abs(x(i)-x(Nmol))
-        if (pdx>xboxh) then
-            pdx=xbox-pdx
+do im=1,N
+    if (im .ne. Nmol) then
+    !print *, im
+        call minobr(x(Nmol),x(im),y(Nmol),y(im),z(Nmol),z(im),rz)
+        !print *, rz,rcut
+        drast(Nmol,im)=rz
+        drast(im,Nmol)=rz
+        if (rz<rcut) then
+            pout=pout+potencfunc(rz,Nmol,im)
+            dpout=dpout+dpotenc(rz,Nmol,im)  !считать в другом месте?
         endif
-
-        pdy=abs(y(i)-y(Nmol))
-        if (pdy>yboxh) then
-            pdy=ybox-pdy
-        endif
-
-        pdz=abs(z(i)-z(Nmol))
-        if (pdz>zboxh) then
-            pdz=zbox-pdz
-        endif
-    !print *,z(Nmol),z(i),z(i)-z(Nmol),pdz
-        rz=dsqrt(pdx*pdx+pdy*pdy+pdz*pdz)
-    !print *,rz,Nmol,i
-        drast(Nmol,i)=rz
-        drast(i,Nmol)=rz
-        if (rz<rcut*10.0) then
-            pout=pout+potencfunc(rz,Nmol,i)
-            dpout=dpout+dpotenc(rz,Nmol,i)  !считать в другом месте?
-        endif
-    !print *, potencfunc(rz,Nmol,i),dpotenc(rz,Nmol,i)
-    !pause
     endif
 enddo
-!if (pout<-999.0) then
-!    print *,emove,pout
-!endif
+
 triple=0.0
 if (trcalc==1) then
     do i=1,N
@@ -716,7 +714,7 @@ do ir=1,10000
     write(18,'(a)') ' '
 enddo
 close(18)
-
+print *, 'Potential test DONE'
 end subroutine
 
 subroutine planartest()
@@ -768,10 +766,12 @@ use generator
     implicit none
 integer(4) Nmol
 real(8) pnew,tnew,dpnew
-real(8) pold,told,dpold    !
-real(8) xold,yold,zold
+real(8) pold,told,dpold
 integer(4) i
     Nmol=ceiling(getrand()*float(N))
+    call pcalc(Nmol,pold,told,dpold)
+    !pdo=pold
+
     !print *, Nmol
     xold=x(Nmol)
     yold=y(Nmol)
@@ -780,51 +780,24 @@ integer(4) i
         nearold1(i)=nearm(Nmol,i)
         nearold2(i)=nearm(i,Nmol)
     enddo
-    call pcalc(Nmol,pold,told,dpold)
     !print *,pold,told,dpold
-    if (getrand()>0.5) then
-        if (randmove==1) then
-            if (getrand()<0.5) then
-                call trans(Nmol,0.15*pp1(atip(Nmol)))
-            else
-                call trans(Nmol,pp1(atip(Nmol)))
-            endif
-        else
-            call trans(Nmol,maxdl)
-        endif
-        !print *,'transok'
-    else
-        if (nearyes(Nmol)==1) then
-            !call modtrans(Nmol)
-            !print *, 'modtrans ok'
-            call trans(Nmol,maxdl)
-        else
-            if (randmove==1) then
-                if (getrand()<0.5) then
-                    call trans(Nmol,0.15*pp1(atip(Nmol)))
-                else
-                    call trans(Nmol,pp1(atip(Nmol)))
-                endif
-            else
-                call trans(Nmol,maxdl)
-            endif
-        endif
-        !print *,'modtransok'
-    endif
+    call trans(Nmol,pp1(atip(Nmol)))
+
     call pcalc(Nmol,pnew,tnew,dpnew)
-    call checkmove(Nmol,pold,told,dpold,pnew,tnew,dpnew,xold,yold,zold)
+    !ppos=pnew
+    !print *, pdo,ppos
+    call checkmove(Nmol,pold,told,dpold,pnew,tnew,dpnew)
     call checknear(Nmol)
 
 
 end subroutine
 
-subroutine checkmove(Nmol,pdn,ptn,ddn,pds,pts,dds,xold,yold,zold)
+subroutine checkmove(Nmol,pds,pts,dds,pdn,ptn,ddn)
 use global
 use generator
     implicit none
 integer(4) Nmol,i
 real(8) pdn,ptn,ddn,pds,pts,dds
-real(8) xold,yold,zold
 real(8) delp
 
 delp=pdn+ptn-pds-pts
@@ -841,6 +814,10 @@ if (dexp(-(delp)/Temp)<getrand()) then
 else
     accept=accept+1
     totalen=totalen+pdn-pds
+    !if (pdn-pds<-1000) then
+    !    print *,totalen, pdn,pds,pdo,ppos
+    !    pause
+    !endif
     totalvir=totalvir+ddn-dds
     totaltri=totaltri+ptn-pts
     !print *,'proshel', totalen,totalvir,totaltri
@@ -856,27 +833,15 @@ subroutine checknear(Nmol)
 use global
     implicit none
 integer(4) Nmol,i
-real(8) chrast,chdx,chdy,chdz
+real(8) rz
 
 do i=1,N
     nearm(Nmol,i)=0.0
     nearm(i,Nmol)=0.0
     nearyes(Nmol)=0
     if (i/=Nmol) then
-        chdx=abs(x(Nmol)-x(i))
-        if (chdx>xboxh) then
-            chdx=xbox-chdx
-        endif
-        chdy=abs(y(Nmol)-y(i))
-        if (chdy>yboxh) then
-            chdy=ybox-chdy
-        endif
-        chdz=abs(z(Nmol)-z(i))
-        if (chdz>zboxh) then
-            chdz=zbox-chdz
-        endif
-        chrast=dsqrt(chdx*chdx+chdy*chdy+chdz*chdz)
-        if (chrast<p1(atip(Nmol),atip(i))*0.75) then
+        call minobr(x(Nmol),x(i),y(Nmol),y(i),z(Nmol),z(i),rz)
+        if (rz<p1(atip(Nmol),atip(i))*0.75) then
             nearm(Nmol,i)=1.0
             nearm(i,Nmol)=1.0
             nearyes(Nmol)=1
@@ -972,62 +937,26 @@ real(8) pdx,pdy,pdz
 integer(4) hist1,hist2,hist3
 real(8) rz
 
-!do i=1,rdfkol1
-!    rdfm1(i) =0.0
-!enddo
-!do i=1,rdfkol2
-!    rdfm2(i) =0.0
-!enddo
-!do i=1,rdfkol3
-!    rdfm3(i) =0.0
-!enddo
 rdfnum=rdfnum+1
 do i=1,N
     do j=i,N
         if (i/=j) then
-        pdx=abs(x(i)-x(j))
-        if (pdx>xboxh) then
-            pdx=xbox-pdx
-        endif
-        pdy=abs(y(i)-y(j))
-        if (pdy>yboxh) then
-            pdy=ybox-pdy
-        endif
-        pdz=abs(z(i)-z(j))
-        if (pdz>zboxh) then
-            pdz=zbox-pdz
-        endif
-        rz=sqrt(pdx*pdx+pdy*pdy+pdz*pdz)
-        !if (rz<(0.5*p1(atip(i),atip(j)))) then
-        !    !print *, (rz<0.5*p1(i,j))
-        !    !print *,x(i),y(i),z(i)
-        !    !print *,x(j),y(j),z(j)
-        !    print *,rz,i,j,(0.5*p1(atip(i),atip(j)))
-        !    print *,(rz<rcut)
-        !endif
-        if (rz<rcut) then
-            !print *, rcut, rz, rz/rcut*float(rdfkol1)
-            hist1=ceiling(rz/rcut*float(rdfkol1))
-            hist2=ceiling(rz/rcut*float(rdfkol2))
-            hist3=ceiling(rz/rcut*float(rdfkol3))
-            !print *,hist1,rdfkol1
-            !pause
-            rdfm1((atip(i)-1)*nv+atip(j),hist1)=rdfm1((atip(i)-1)*nv+atip(j),hist1)+1.0
-            rdfm2((atip(i)-1)*nv+atip(j),hist2)=rdfm2((atip(i)-1)*nv+atip(j),hist2)+1.0
-            rdfm3((atip(i)-1)*nv+atip(j),hist3)=rdfm3((atip(i)-1)*nv+atip(j),hist3)+1.0
-        endif
+            call minobr(x(i),x(j),y(i),y(j),z(i),z(j),rz)
+            if (rz<rcut) then
+                !print *, rcut, rz, rz/rcut*float(rdfkol1)
+                hist1=ceiling(rz/delrdf1)
+                hist2=ceiling(rz/delrdf2)
+                hist3=ceiling(rz/delrdf3)
+                !print *,hist1,rdfkol1
+                !pause
+                rdfm1((atip(i)-1)*nv+atip(j),hist1)=rdfm1((atip(i)-1)*nv+atip(j),hist1)+1.0
+                rdfm2((atip(i)-1)*nv+atip(j),hist2)=rdfm2((atip(i)-1)*nv+atip(j),hist2)+1.0
+                rdfm3((atip(i)-1)*nv+atip(j),hist3)=rdfm3((atip(i)-1)*nv+atip(j),hist3)+1.0
+            endif
         endif
     enddo
 enddo
-!do i=1,rdfkol1
-!    sumrdfm1(i)=sumrdfm1(i)+rdfm1(i)
-!enddo
-!do i=1,rdfkol2
-!    sumrdfm2(i)=sumrdfm2(i)+rdfm2(i)
-!enddo
-!do i=1,rdfkol3
-!    sumrdfm3(i)=sumrdfm3(i)+rdfm3(i)
-!enddo
+
 end subroutine
 
 
@@ -1177,4 +1106,44 @@ write(34,'(i8,13f20.15)') nmove,float(kch0)/kchsum1,float(kch1)/kchsum1,float(kc
     &,float(kch2)/3.0/kchsum2,&
     float(kch3)/4.0/kchsum2,float(kch4)/5.0/kchsum2,float(kch5)/6.0/kchsum2,float(kchob)/float(N*N)
 write(35,'(i8,3f40.15)') nmove,totalen,totaltri,totalvir
+end subroutine
+
+subroutine minobr(x1i,x2i,y1i,y2i,z1i,z2i,r)
+use global
+    implicit none
+integer(4) i
+real(8) pdx,pdy,pdz
+real(8) x1i,x2i,y1i,y2i,z1i,z2i
+real(8) r,xv,yv,zv
+
+if (x1i-x2i>xboxh) then
+    xv=x2i+xbox
+else if (x2i-x1i>xboxh) then
+    xv=x2i-xbox
+else
+    xv=x2i
+endif
+pdx=xv-x1i
+
+
+if (y1i-y2i>yboxh) then
+    yv=y2i+ybox
+else if (y2i-y1i>yboxh) then
+    yv=y2i-ybox
+else
+    yv=y2i
+endif
+pdy=yv-y1i
+
+if (z1i-z2i>zboxh) then
+    zv=z2i+zbox
+else if (z2i-z1i>zboxh) then
+    zv=z2i-zbox
+else
+    zv=z2i
+endif
+pdz=zv-z1i
+
+r=dsqrt(pdx*pdx+pdy*pdy+pdz*pdz)
+
 end subroutine
