@@ -1,0 +1,24 @@
+numbers of particle type
+1
+numbers of particle in a row
+6
+potential type (1-LJ)
+1
+number of MCsteps for equilibration
+10000
+numbers of samples
+5
+number of MCstep per sample
+10000
+number density
+0.8
+temperature
+1.5
+A
+216
+1.0
+1.0
+1.0
+1.0
+1.0
+1.0
