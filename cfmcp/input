@@ -5,20 +5,24 @@ numbers of particle in a row
 potential type (1-LJ)
 1
 number of MCsteps for equilibration
-10000
+1000000
 numbers of samples
-5
+4
 number of MCstep per sample
-10000
+1000000
 number density
-0.8
+0.9
 temperature
-1.5
+0.9
+calculating 3-body interaction
+0
+additional volume (integer)
+1
 A
 216
 1.0
 1.0
-1.0
-1.0
-1.0
+0.30
+1000.0
+1600000.0
 1.0
