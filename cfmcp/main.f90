@@ -176,6 +176,25 @@ if (ptip==2) then
     ul=0.5*(1.0+dtanh((r-rp)/wp))
     pfunc=(1.0-ul)*u2+ul*u1
 endif
+if (ptip==3) then
+    if (i/=j) then
+        rz=p1(tip(i),tip(j))/r    !rm/r
+        rz=rz*rz                  !(rm/r)^2
+        rz=rz*rz*rz               !(rm/r)^6
+        rp=0.75*p1(tip(i),tip(j))
+        wp=0.015*p1(tip(i),tip(j))
+        u1=4.0*p2(tip(i),tip(j))*(rz*rz-rz)
+        u2=0.5*p5(tip(i),tip(j))*(r-p3(tip(i),tip(j)))*(r-p3(tip(i),tip(j)))-p4(tip(i),tip(j))
+        ul=0.5*(1.0+dtanh((r-rp)/wp))
+        pfunc=(1.0-ul)*u2+ul*u1
+    else
+        rz=p1(tip(i),tip(j))/r
+        rz=rz*rz
+        rz=rz*rz*rz
+        pfunc=4.0d0*p2(tip(i),tip(j))*(rz*rz-rz)
+    endif
+endif
+
 end function
 
 function dpfunc(i,j,r)
@@ -207,6 +226,30 @@ if (ptip==2) then
     dpfunc=dpfunc-sep*U2
     dpfunc=dpfunc+sep*U1
     dpfunc=dpfunc*r
+endif
+if (ptip==3) then
+    if (i/=j) then
+        rp=0.75*p1(tip(i),tip(j))
+        wp=0.015*p1(tip(i),tip(j))
+        lr=0.5*(1.0+dtanh((r-rp)/wp))
+        rz=p1(tip(i),tip(j))/r
+        rz2=rz*rz
+        rz6=rz2*rz2*rz2
+        U1=4.0*p2(tip(i),tip(j))*(rz6*rz6-rz6)
+        U2=0.5*p5(tip(i),tip(j))*(r-p3(tip(i),tip(j)))*(r-p3(tip(i),tip(j)))&
+        &-p4(tip(i),tip(j))
+        sep=0.5/wp/((dcosh((r-rp)/wp))*(dcosh((r-rp)/wp)))
+        dpfunc=p5(tip(i),tip(j))*(r-p3(tip(i),tip(j)))*(1.0-lr)
+        dpfunc=dpfunc+4.0*p2(tip(i),tip(j))*(6.0*rz6-12.0*rz6*rz6)/r*lr
+        dpfunc=dpfunc-sep*U2
+        dpfunc=dpfunc+sep*U1
+        dpfunc=dpfunc*r
+    else
+        rz=p1(tip(i),tip(j))/r
+        rz=rz*rz
+        rz=rz*rz*rz
+        dpfunc=4.0d0*p2(tip(i),tip(j))*(6.0*rz-12.0*rz*rz)
+    endif
 endif
 end function
 function tfunc(i,j,k,r1,r2,r3)
@@ -275,7 +318,7 @@ do move=1,neq         !-----------equilibration
         call equilibout(move)
     endif
     if (mod(move,200)==0) then
-        call xyzanim()
+        !call xyzanim()
         if (mod(move,10000)==0) then
             call checkdl()
         endif
@@ -310,7 +353,7 @@ do csample=1,nsamp       !----Productation
             call calcdens()
         endif
         if (mod(move,400)==0) then
-            call xyzanim()
+            !call xyzanim()
             if (mod(move,4000)==0) then
                 call resout(csample)
             endif
@@ -590,7 +633,7 @@ if (ptip==1) then
         enddo
     enddo
 endif
-if (ptip==2) then
+if ((ptip==2) .or. (ptip==3)) then
     print *, 'Lorenc-Berthlo+GE'
     do i=1,nv
         do j=1,nv
@@ -750,7 +793,7 @@ integer(4) nmol
 real(8) xn,yn,zn
 real(8) dx,dy,dz
 
-if (ptip==2) then
+if ((ptip==2).or.(ptip==3)) then
     if (getrand()>0.5) then
         maxdl=1.0
     else
@@ -1254,7 +1297,7 @@ end subroutine
 subroutine densinit()
 use global
     implicit none
-integer(4) i
+!integer(4) i
 
 indens1=30
 indens2=60
