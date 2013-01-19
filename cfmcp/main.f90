@@ -128,8 +128,8 @@ real(8) totalen,totalden,totalten
 integer(4) calctri
 real(8) xbox,xboxh,ybox,yboxh,zbox,zboxh
 integer(4),allocatable:: nearm(:,:)
-real(8) maxdl
-integer(4) accept,naccept
+real(8) maxdl,maxdl2
+integer(4) accept,naccept,accept2,naccept2
 real(8),allocatable:: sumten(:)
 real(8),allocatable:: sumtden(:)
 real(8),allocatable:: sumtten(:)
@@ -148,6 +148,7 @@ real(8),allocatable:: sumdens1(:),sumdens2(:),sumdens3(:)
 integer(4) numdens
 real(8) drdens1,drdens2,drdens3
 integer(4) indens1,indens2,indens3
+integer(4) movetype,cmovetype
 !---functions----------------------------------------------------
 contains    !potential functions
 function pfunc(i,j,r)
@@ -177,7 +178,7 @@ if (ptip==2) then
     pfunc=(1.0-ul)*u2+ul*u1
 endif
 if (ptip==3) then
-    if (i/=j) then
+    if (tip(i)/=tip(j)) then
         rz=p1(tip(i),tip(j))/r    !rm/r
         rz=rz*rz                  !(rm/r)^2
         rz=rz*rz*rz               !(rm/r)^6
@@ -305,10 +306,16 @@ open(31,file='equil.xyz')
 print *, ' --- Start Equilibration ---'
 open(56,file='equilib.out')
 open(34,file='enumber.out')
+open(58,file='maxdl.out')
+cmovetype=1
 do move=1,neq         !-----------equilibration
     cmol=ceiling(getrand()*n)   !get currwnt molecule
     call pcalc(cmol,pold,dpold,told,x(cmol),y(cmol),z(cmol))
-    call trans(cmol,xnew,ynew,znew)
+    if (movetype==1) then
+        call trans(cmol,xnew,ynew,znew)
+    elseif (movetype==3) then
+        call mod3trans(cmol,xnew,ynew,znew)
+    endif
     call pcalc(cmol,pnew,dpnew,tnew,xnew,ynew,znew)
     call checkmove(cmol,pold,dpold,told,pnew,dpnew,tnew,xnew,ynew,znew)
     call checknear(cmol)
@@ -317,8 +324,8 @@ do move=1,neq         !-----------equilibration
     if (mod(move,40)==0) then
         call equilibout(move)
     endif
-    if (mod(move,200)==0) then
-        !call xyzanim()
+    if (mod(move,20000)==0) then
+        call xyzanim()
         if (mod(move,10000)==0) then
             call checkdl()
         endif
@@ -341,7 +348,11 @@ do csample=1,nsamp       !----Productation
     do move=1,nprod
         cmol=ceiling(getrand()*n)   !get currwnt molecule
         call pcalc(cmol,pold,dpold,told,x(cmol),y(cmol),z(cmol))
-        call trans(cmol,xnew,ynew,znew)
+        if (movetype==1) then
+            call trans(cmol,xnew,ynew,znew)
+        elseif (movetype==3) then
+            call mod3trans(cmol,xnew,ynew,znew)
+        endif
         call pcalc(cmol,pnew,dpnew,tnew,xnew,ynew,znew)
         call checkmove(cmol,pold,dpold,told,pnew,dpnew,tnew,xnew,ynew,znew)
         call checknear(cmol)
@@ -356,6 +367,10 @@ do csample=1,nsamp       !----Productation
             !call xyzanim()
             if (mod(move,4000)==0) then
                 call resout(csample)
+                if(mod(move,20000)==0) then
+                    call xyzanim()
+                    call checkdl()
+                endif
             endif
         endif
     enddo
@@ -368,6 +383,7 @@ do csample=1,nsamp       !----Productation
 enddo
 close(56)
 close(34)
+close(58)
 print *, '--- Sucsesfulli ends ---'
 !---close write files
 close(31)
@@ -422,6 +438,10 @@ open(21,file='input')
     read(21,'(a)') caption
     read(21,'(i5)') calcpe
     print *, trim(adjustl(caption)), ': ', calcpe
+
+    read(21,'(a)') caption
+    read(21,'(i5)') movetype
+    print *, trim(adjustl(caption)), ': ', movetype
 
     print *, 'Particle parameters'
     allocate(label(nv))
@@ -508,7 +528,8 @@ do i=1,nv
         tip(nom)=i
     enddo
 enddo
-maxdl=1.0
+maxdl=1.0*pp1(1)
+maxdl2=1.0*pp1(1)
 !allocating sums for sample
 allocate(sumten(nsamp))
 allocate(sumtden(nsamp))
@@ -597,6 +618,10 @@ skch23=0.0
 skch24=0.0
 skch25=0.0
 kchnum=0
+accept=0
+naccept=0
+accept2=0
+naccept2=0
 end subroutine
 
 subroutine xyzst()
@@ -793,13 +818,6 @@ integer(4) nmol
 real(8) xn,yn,zn
 real(8) dx,dy,dz
 
-if ((ptip==2).or.(ptip==3)) then
-    if (getrand()>0.5) then
-        maxdl=1.0
-    else
-        maxdl=0.15
-    endif
-endif
 
 dx=(getrand()-0.5)*2.0*maxdl
 dy=(getrand()-0.5)*2.0*maxdl
@@ -841,10 +859,18 @@ real(8) deltap
 deltap=pn+tn-po-to
 if (dexp(-deltap/temp)<getrand()) then
     !not accept
-    naccept=naccept+1
+    if (cmovetype==1) then
+        naccept=naccept+1
+    else
+        naccept2=naccept2+1
+    endif
 else
     !accept
-    accept=accept+1
+    if (cmovetype==1) then
+        accept=accept+1
+    else
+        accept2=accept2+1
+    endif
     x(nmol)=xn
     y(nmol)=yn
     z(nmol)=zn
@@ -874,26 +900,60 @@ end subroutine
 subroutine checkdl()
 use global
     implicit none
-!print *, '--------------------------------------'
-!print *, ' Old max distance: ', maxdl
-if (accept==0) then
-    maxdl=maxdl*0.75
-else if (naccept==0) then
-    maxdl=maxdl*1.25
-else if (float(accept)/float(naccept)<0.4) then
-    maxdl=maxdl*0.75
-else if (float(accept)/float(naccept)>0.6) then
-    maxdl=maxdl*1.25
-endif
-if (ptip==2) then
-    maxdl=1.0*p1(1,1)
-endif
 
-!print *, ' Accept: ', accept, ' Not Accept: ', naccept
-!print *, ' New max distance: ', maxdl
-!print *, '------------------------------------- '
+if (movetype==1) then
+    if (accept==0) then
+        maxdl=maxdl*0.75
+    else if (naccept==0) then
+        maxdl=maxdl*1.25
+    else if (float(accept)/float(naccept)<0.4) then
+        maxdl=maxdl*0.75
+    else if (float(accept)/float(naccept)>0.6) then
+        maxdl=maxdl*1.25
+    endif
+    if (ptip==2) then
+        maxdl=1.0*p1(1,1)
+    endif
+else
+    if (accept==0) then
+        maxdl=maxdl*0.75
+    else if (naccept==0) then
+        maxdl=maxdl*1.25
+    else if (float(accept)/float(naccept)<0.4) then
+        maxdl=maxdl*0.75
+    else if (float(accept)/float(naccept)>0.6) then
+        maxdl=maxdl*1.25
+    endif
+    if (maxdl>0.4) then
+        maxdl=0.4
+    endif
+    if (maxdl<0.05) then
+        maxdl=0.05
+    endif
+
+    if (accept2==0) then
+        maxdl2=maxdl2*1.05
+    elseif (naccept2==0) then
+        maxdl2=maxdl2*0.95
+    elseif (float(accept2)/float(naccept2)<0.4) then
+        maxdl2=maxdl2*1.05
+    elseif (float(accept2)/float(naccept2)>0.6) then
+        maxdl2=maxdl2*0.95
+    endif
+    if (maxdl2>2.0) then
+        maxdl2=2.0
+    endif
+    if (maxdl2<0.75) then
+        maxdl=0.75
+    endif
+endif
+write(58,'(2i10,2f20.10,2i10,2f20.10)') accept,naccept,float(accept)/float(naccept),maxdl,&
+    &accept2,naccept,float(accept2)/float(naccept2),maxdl2
+
 accept=0
 naccept=0
+accept2=0
+naccept2=0
 
 
 end subroutine
@@ -1187,7 +1247,7 @@ skch25(csamp)=skch25(csamp)+kch5/kchsum2/6.0
 
 end subroutine
 
-subroutine mod1trans(Nmol,xn,yn,zn)
+subroutine mod2trans(Nmol,xn,yn,zn)
 use global
 use generator
     implicit none
@@ -1231,7 +1291,7 @@ cosoz=dcos(randgamma)  !dsqrt(1.0-sinoz*sinoz)
 xv=xtemp
 yv=ytemp
 zv=ztemp
-!поворачиваем
+!поворачиваем ПРОВЕРИТЬ
 xtemp=cosox*cosoy*xv+(cosox*sinoy*sinoz-sinox*cosoz)*yv+(cosox*sinoy*cosoz+sinox*sinoz)*zv
 ytemp=sinox*cosoy*xv+(sinox*sinoy*sinoz+cosox*cosoz)*yv+(sinox*sinoy*cosoz-cosox*sinoz)*zv
 ztemp=-sinoy*xv+cosoy*sinoz*yv+cosoy*cosoz*zv
@@ -1315,5 +1375,67 @@ drdens1=zbox/float(indens1)
 drdens2=zbox/float(indens2)
 drdens3=zbox/float(indens3)
 numdens=0
+
+end subroutine
+
+subroutine mod3trans(nmol,xn,yn,zn)
+use generator
+use global
+    implicit none
+integer(4) nmol
+real(8) xn,yn,zn
+real(8) dx,dy,dz
+real(8) drast
+real(8) alf,bet,gam
+real(8) sin1,cos1,sin2,cos2,sin3,cos3
+
+
+if (getrand()<0.5) then
+    cmovetype=1
+    dx=(getrand()-0.5)*2.0*maxdl
+    dy=(getrand()-0.5)*2.0*maxdl
+    dz=(getrand()-0.5)*2.0*maxdl
+
+    xn=x(nmol)+dx
+    yn=y(nmol)+dy
+    zn=z(nmol)+dz
+else
+    cmovetype=2
+    drast=(getrand()*0.5)*2.0*pp1(nmol)*0.2+maxdl2
+    alf=(getrand()-0.5)*0.95
+    bet=(getrand()-0.5)*0.95
+    gam=(getrand()-0.5)*0.95
+    sin1=sin(alf)
+    cos1=cos(alf)
+    sin2=sin(bet)
+    cos2=cos(bet)
+    sin3=sin(gam)
+    cos3=cos(gam)
+    dx=(cos1*cos2-sin1*sin2*sin3)*drast
+    dy=(sin1*cos1-cos1*cos2*sin3)*drast
+    dz=(sin2*sin3)*drast
+    xn=x(nmol)+dx
+    yn=y(nmol)+dy
+    zn=z(nmol)+dz
+
+endif
+if (xn>xgrb) then
+    xn=xn-xbox
+endif
+if (yn>ygrb) then
+    yn=yn-ybox
+endif
+if (zn>zgrb) then
+    zn=zn-zbox
+endif
+if (xn<xgrm) then
+    xn=xn+xbox
+endif
+if (yn<ygrm) then
+    yn=yn+ybox
+endif
+if (zn<zgrm) then
+    zn=zn+zbox
+endif
 
 end subroutine
